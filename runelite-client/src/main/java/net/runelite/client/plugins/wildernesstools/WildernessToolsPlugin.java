@@ -3,6 +3,7 @@ package net.runelite.client.plugins.wildernesstools;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.Player;
 import net.runelite.api.Varbits;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
@@ -17,6 +18,9 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @PluginDescriptor(
         name = "Wilderness Tools",
@@ -49,7 +53,6 @@ public class WildernessToolsPlugin extends Plugin {
 
     private boolean wildernessAlertOverlayOpened = false;
 
-
     public boolean isInWilderness() {
         return client.getVarbitValue(Varbits.IN_WILDERNESS) == 1;
     }
@@ -64,13 +67,33 @@ public class WildernessToolsPlugin extends Plugin {
 
     WildernessRangeTuple wildernessRange = new WildernessRangeTuple();
 
+    static final int PLAYER_NUMBER_OF_TILES_AWAY = 20;
+
     @Subscribe
     public void onGameTick(GameTick event) {
+        boolean isPlayerInDanger = false;
         if (isInWilderness()) {
             wildernessRange.updateRange(wildernessLevel());
-            System.out.println(wildernessRange.minCMB);
-            System.out.println(wildernessRange.maxCMB);
 
+            List<Player> players = client.getPlayers();
+            Player localPlayer = client.getLocalPlayer();
+            WorldPoint localPoint = localPlayer.getWorldLocation();
+
+            List<Player> nearbyPlayers = players.stream()
+                    .filter(player -> localPoint.distanceTo(player.getWorldLocation()) < PLAYER_NUMBER_OF_TILES_AWAY)
+                    .collect(Collectors.toList());
+
+            for (Player player : nearbyPlayers) {
+                if (Objects.equals(player.getName(), client.getLocalPlayer().getName())) {
+                    continue;
+                }
+                if (player.getCombatLevel() >= wildernessRange.minCMB
+                        && player.getCombatLevel() <= wildernessRange.maxCMB) {
+                    isPlayerInDanger = true;
+                }
+            }
+        }
+        if (isPlayerInDanger) {
             wildernessAlertOverlayOpened = true;
             overlayManager.add(wildernessToolsOverlay);
         } else if (wildernessAlertOverlayOpened) {
